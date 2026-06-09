@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PingBot — Uptime Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root[data-theme="dark"] {
+    --bg-primary: #070B14; --bg-secondary: #0D1321; --bg-card: #111827;
+    --bg-card-hover: #1a2235; --bg-input: #0D1321; --border: #1e2d45;
+    --border-focus: #00D4FF; --text-primary: #E8F4FD; --text-secondary: #8BA3C0;
+    --text-muted: #4B6280; --accent: #00D4FF; --accent-glow: rgba(0,212,255,0.12);
+    --success: #00FF88; --success-bg: rgba(0,255,136,0.08);
+    --danger: #FF4560; --danger-bg: rgba(255,69,96,0.08);
+    --warning: #FFB340; --warning-bg: rgba(255,179,64,0.08);
+    --shadow: 0 4px 24px rgba(0,0,0,0.5); --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
+    --overlay: rgba(7,11,20,0.85);
+  }
+  :root[data-theme="light"] {
+    --bg-primary: #F0F4FF; --bg-secondary: #E4EAF8; --bg-card: #FFFFFF;
+    --bg-card-hover: #F5F8FF; --bg-input: #EEF2FF; --border: #C8D5E8;
+    --border-focus: #0088CC; --text-primary: #0D1321; --text-secondary: #4A5568;
+    --text-muted: #9AA5B4; --accent: #0088CC; --accent-glow: rgba(0,136,204,0.1);
+    --success: #00A35C; --success-bg: rgba(0,163,92,0.08);
+    --danger: #D42040; --danger-bg: rgba(212,32,64,0.08);
+    --warning: #CC8800; --warning-bg: rgba(204,136,0,0.08);
+    --shadow: 0 4px 24px rgba(0,0,0,0.08); --shadow-card: 0 2px 12px rgba(0,0,0,0.05);
+    --overlay: rgba(240,244,255,0.85);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:var(--bg-primary); color:var(--text-primary); min-height:100vh; transition:background .3s,color .3s; }
+
+  /* NAVBAR */
+  .navbar { position:sticky; top:0; z-index:100; background:var(--bg-secondary); border-bottom:1px solid var(--border); height:60px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; backdrop-filter:blur(16px); }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand-icon { width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,#00D4FF,#0055FF); display:flex; align-items:center; justify-content:center; font-size:17px; }
+  .brand-name { font-family:'JetBrains Mono',monospace; font-weight:700; font-size:17px; color:var(--text-primary); }
+  .brand-name em { color:var(--accent); font-style:normal; }
+  .nav-right { display:flex; align-items:center; gap:10px; }
+  .live-badge { display:flex; align-items:center; gap:6px; font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--text-secondary); background:var(--bg-card); border:1px solid var(--border); padding:4px 10px; border-radius:20px; }
+  .live-dot { width:6px; height:6px; border-radius:50%; background:var(--success); animation:blink 2s infinite; }
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* SW status badge */
+  .sw-badge { display:flex; align-items:center; gap:5px; font-size:10px; font-family:'JetBrains Mono',monospace; padding:4px 9px; border-radius:20px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-muted); transition:all .3s; }
+  .sw-badge.active { border-color:rgba(0,255,136,.3); color:var(--success); background:var(--success-bg); }
+  .sw-badge.inactive { border-color:rgba(255,179,64,.3); color:var(--warning); background:var(--warning-bg); }
+  .sw-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
+
+  .settings-wrap { position:relative; }
+  .settings-btn { width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+  .settings-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-glow); }
+  .dropdown { position:absolute; top:46px; right:0; width:230px; background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:6px; box-shadow:var(--shadow); z-index:200; display:none; flex-direction:column; gap:2px; }
+  .dropdown.open { display:flex; }
+  .dd-head { padding:7px 12px 5px; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); }
+  .dd-item { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; border-radius:8px; font-size:13px; color:var(--text-secondary); cursor:pointer; transition:all .15s; user-select:none; }
+  .dd-item:hover { background:var(--bg-card-hover); color:var(--text-primary); }
+  .dd-item .left { display:flex; align-items:center; gap:8px; }
+  .toggle { position:relative; width:34px; height:18px; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .track { position:absolute; inset:0; border-radius:18px; background:var(--border); cursor:pointer; transition:.3s; }
+  .track::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:.3s; }
+  .toggle input:checked + .track { background:var(--accent); }
+  .toggle input:checked + .track::after { left:18px; }
+  .dd-sep { height:1px; background:var(--border); margin:4px 0; }
+
+  /* MAIN */
+  .main { max-width:1080px; margin:0 auto; padding:28px 18px 80px; }
+  .add-box { background:var(--bg-card); border:1px solid var(--border); border-radius:18px; padding:22px 24px; margin-bottom:24px; box-shadow:var(--shadow-card); }
+  .box-title { font-size:14px; font-weight:600; margin-bottom:14px; color:var(--text-primary); display:flex; align-items:center; gap:7px; }
+  .box-title .ic { color:var(--accent); }
+  .input-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .url-input { flex:1; min-width:200px; height:44px; padding:0 14px; background:var(--bg-input); border:1px solid var(--border); border-radius:10px; font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-primary); outline:none; transition:border .2s; }
+  .url-input::placeholder { color:var(--text-muted); }
+  .url-input:focus { border-color:var(--border-focus); box-shadow:0 0 0 3px var(--accent-glow); }
+  .sel { height:44px; padding:0 12px; min-width:128px; background:var(--bg-input); border:1px solid var(--border); border-radius:10px; font-family:'Inter',sans-serif; font-size:13px; color:var(--text-primary); outline:none; cursor:pointer; transition:border .2s; }
+  .sel:focus { border-color:var(--border-focus); }
+  .add-btn { height:44px; padding:0 20px; border:none; border-radius:10px; background:linear-gradient(135deg,var(--accent),#0055FF); font-family:'Inter',sans-serif; font-size:13px; font-weight:600; color:#fff; cursor:pointer; transition:all .2s; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+  .add-btn:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(0,180,255,.35); }
+  .add-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+  .count-line { font-size:12px; color:var(--text-muted); margin-top:9px; }
+  .count-line b { color:var(--accent); }
+
+  /* STATS */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:22px; }
+  .sc { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:15px 18px; box-shadow:var(--shadow-card); }
+  .sc-label { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:5px; }
+  .sc-val { font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:700; }
+  .sc-val.a{color:var(--accent);} .sc-val.g{color:var(--success);} .sc-val.r{color:var(--danger);} .sc-val.w{color:var(--warning);}
+
+  /* MONITORS */
+  .monitors-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .monitors-head h2 { font-size:14px; font-weight:600; color:var(--text-primary); display:flex; align-items:center; gap:7px; }
+  .empty { background:var(--bg-card); border:2px dashed var(--border); border-radius:18px; padding:64px 20px; text-align:center; }
+  .empty .eic { font-size:52px; opacity:.3; margin-bottom:14px; }
+  .empty h3 { font-size:15px; color:var(--text-secondary); margin-bottom:6px; }
+  .empty p { font-size:13px; color:var(--text-muted); }
+
+  /* CARD */
+  .card { background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:17px 20px; margin-bottom:10px; transition:all .25s; box-shadow:var(--shadow-card); }
+  .card:hover { border-color:rgba(0,212,255,.35); box-shadow:0 4px 20px var(--accent-glow); }
+  .card.up{border-left:3px solid var(--success);} .card.down{border-left:3px solid var(--danger);} .card.pending{border-left:3px solid var(--warning);}
+  .card-top { display:flex; align-items:center; gap:11px; }
+  .pulse { width:13px; height:13px; border-radius:50%; flex-shrink:0; position:relative; }
+  .pulse.up{background:var(--success);} .pulse.down{background:var(--danger);} .pulse.pending{background:var(--warning);}
+  .pulse.up::after,.pulse.down::after { content:''; position:absolute; inset:-4px; border-radius:50%; border:2px solid currentColor; animation:ring 2s infinite; }
+  .pulse.up::after{color:var(--success);} .pulse.down::after{color:var(--danger);}
+  @keyframes ring{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(2.2)}}
+  .card-url { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500; color:var(--text-primary); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .badge { padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; flex-shrink:0; }
+  .badge.up{background:var(--success-bg);color:var(--success);} .badge.down{background:var(--danger-bg);color:var(--danger);} .badge.pending{background:var(--warning-bg);color:var(--warning);}
+  .del-btn { width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all .2s; flex-shrink:0; }
+  .del-btn:hover { border-color:var(--danger); color:var(--danger); background:var(--danger-bg); }
+  .card-meta { display:flex; gap:18px; margin-top:11px; flex-wrap:wrap; }
+  .meta-i { font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:5px; }
+  .meta-i .v { color:var(--text-secondary); font-family:'JetBrains Mono',monospace; font-size:12px; }
+  .meta-i .v.g{color:var(--success);} .meta-i .v.r{color:var(--danger);}
+  .hist { display:flex; gap:3px; margin-top:11px; align-items:flex-end; height:24px; }
+  .hb { width:8px; border-radius:3px; flex-shrink:0; transition:transform .1s; cursor:default; }
+  .hb:hover{transform:scaleY(1.3);}
+  .hb.ok{background:var(--success);opacity:.75;height:100%;} .hb.fail{background:var(--danger);opacity:.75;height:70%;} .hb.none{background:var(--border);height:40%;}
+  .card-bot { display:flex; align-items:center; justify-content:space-between; margin-top:10px; flex-wrap:wrap; gap:8px; }
+  .bot-left { display:flex; align-items:center; gap:8px; }
+  .mini-sel { height:28px; padding:0 8px; background:var(--bg-input); border:1px solid var(--border); border-radius:7px; font-size:11px; color:var(--text-secondary); outline:none; cursor:pointer; }
+  .itag { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:6px; background:var(--accent-glow); color:var(--accent); font-size:10px; font-family:'JetBrains Mono',monospace; border:1px solid rgba(0,212,255,.18); }
+  .pause-btn { height:28px; padding:0 10px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all .2s; }
+  .pause-btn:hover{border-color:var(--warning);color:var(--warning);background:var(--warning-bg);}
+  .pause-btn.paused{border-color:var(--success);color:var(--success);background:var(--success-bg);}
+
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; z-index:999; background:var(--overlay); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
+  .modal-overlay.show { opacity:1; pointer-events:all; }
+  .modal { background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:28px 28px 22px; width:100%; max-width:360px; margin:0 16px; box-shadow:var(--shadow); transform:scale(.94) translateY(8px); transition:transform .25s; }
+  .modal-overlay.show .modal { transform:scale(1) translateY(0); }
+  .modal-icon { font-size:36px; margin-bottom:12px; display:block; }
+  .modal-title { font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:6px; }
+  .modal-msg { font-size:13px; color:var(--text-secondary); line-height:1.55; margin-bottom:22px; }
+  .modal-msg b { color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:12px; word-break:break-all; }
+  .modal-btns { display:flex; gap:10px; justify-content:flex-end; }
+  .mbtn { height:38px; padding:0 18px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--border); transition:all .2s; font-family:'Inter',sans-serif; }
+  .mbtn.cancel { background:var(--bg-input); color:var(--text-secondary); }
+  .mbtn.cancel:hover { border-color:var(--text-muted); color:var(--text-primary); }
+  .mbtn.confirm-del { background:var(--danger-bg); color:var(--danger); border-color:var(--danger); }
+  .mbtn.confirm-del:hover { background:var(--danger); color:#fff; }
+  .mbtn.confirm-pause { background:var(--warning-bg); color:var(--warning); border-color:var(--warning); }
+  .mbtn.confirm-pause:hover { background:var(--warning); color:#fff; }
+  .mbtn.confirm-clear { background:var(--danger-bg); color:var(--danger); border-color:var(--danger); }
+  .mbtn.confirm-clear:hover { background:var(--danger); color:#fff; }
+
+  /* TOAST */
+  .toasts { position:fixed; bottom:22px; right:20px; z-index:1000; display:flex; flex-direction:column; gap:8px; }
+  .toast { padding:11px 16px; border-radius:10px; font-size:13px; font-weight:500; box-shadow:var(--shadow); max-width:300px; display:flex; align-items:center; gap:8px; background:var(--bg-card); color:var(--text-primary); animation:tsin .3s ease; }
+  .toast.s{border-left:3px solid var(--success);} .toast.e{border-left:3px solid var(--danger);} .toast.i{border-left:3px solid var(--accent);}
+  @keyframes tsin{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+
+  .credit { text-align:center; padding:18px; font-size:12px; color:var(--text-muted); border-top:1px solid var(--border); margin-top:40px; }
+  .credit b { color:var(--accent); }
+
+  @media(max-width:580px){
+    .input-row{flex-direction:column;}
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .card-meta{gap:10px;}
+    .sw-badge span { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="brand">
+    <div class="brand-icon">🛰️</div>
+    <div class="brand-name">Ping<em>Bot</em></div>
+  </div>
+  <div class="nav-right">
+    <div class="sw-badge inactive" id="swBadge" title="Service Worker Status">
+      <div class="sw-dot"></div>
+      <span id="swLabel">Background: Off</span>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <span id="liveCount">0</span>&nbsp;active
+    </div>
+    <div class="settings-wrap">
+      <button class="settings-btn" id="settBtn">⚙️</button>
+      <div class="dropdown" id="dropdown">
+        <div class="dd-head">Settings</div>
+        <div class="dd-item" onclick="toggleDark()">
+          <div class="left">🌙 <span>Dark Mode</span></div>
+          <label class="toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" id="darkCb" checked onchange="toggleDark()">
+            <div class="track"></div>
+          </label>
+        </div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="confirmPauseAll()">
+          <div class="left">⏸️ <span id="pauseAllLbl">Pause All</span></div>
+        </div>
+        <div class="dd-item" onclick="confirmClearAll()">
+          <div class="left">🗑️ <span>Clear All</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="add-box">
+    <div class="box-title"><span class="ic">📡</span> Add URL to Monitor</div>
+    <div class="input-row">
+      <input id="urlIn" class="url-input" type="text" placeholder="https://your-site.com" autocomplete="off"/>
+      <select id="ivSel" class="sel">
+        <option value="30000">⏱ 30 seconds</option>
+        <option value="60000" selected>⏱ 1 minute</option>
+        <option value="120000">⏱ 2 minutes</option>
+        <option value="300000">⏱ 5 minutes</option>
+        <option value="600000">⏱ 10 minutes</option>
+        <option value="900000">⏱ 15 minutes</option>
+        <option value="1800000">⏱ 30 minutes</option>
+        <option value="3600000">⏱ 1 hour</option>
+        <option value="7200000">⏱ 2 hours</option>
+        <option value="18000000">⏱ 5 hours</option>
+        <option value="36000000">⏱ 10 hours</option>
+        <option value="86400000">⏱ 24 hours</option>
+        <option value="259200000">⏱ 3 days</option>
+        <option value="604800000">⏱ 7 days</option>
+      </select>
+      <button class="add-btn" id="addBtn" onclick="addMonitor()">＋ Add Monitor</button>
+    </div>
+    <div class="count-line"><b id="mc">0</b>/10 monitors used &nbsp;·&nbsp; Enter key to add</div>
+  </div>
+
+  <div class="stats">
+    <div class="sc"><div class="sc-label">Monitors</div><div class="sc-val a" id="sTotal">0</div></div>
+    <div class="sc"><div class="sc-label">Online</div><div class="sc-val g" id="sUp">0</div></div>
+    <div class="sc"><div class="sc-label">Offline</div><div class="sc-val r" id="sDown">0</div></div>
+    <div class="sc"><div class="sc-label">Total Pings</div><div class="sc-val a" id="sPings">0</div></div>
+  </div>
+
+  <div class="monitors-head"><h2>📊 Live Monitors</h2></div>
+  <div id="list">
+    <div class="empty" id="empty">
+      <div class="eic">🛰️</div>
+      <h3>No monitors yet</h3>
+      <p>Add a URL above to start real-time uptime monitoring</p>
+    </div>
+  </div>
+</div>
+
+<div class="credit">Made with ❤️ &nbsp;|&nbsp; Credit by <b>Mandal</b></div>
+<div class="toasts" id="toasts"></div>
+
+<!-- CUSTOM CONFIRM MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <span class="modal-icon" id="modalIcon">⚠️</span>
+    <div class="modal-title" id="modalTitle">Are you sure?</div>
+    <div class="modal-msg" id="modalMsg"></div>
+    <div class="modal-btns">
+      <button class="mbtn cancel" onclick="closeModal()">Cancel</button>
+      <button class="mbtn" id="modalConfirmBtn" onclick="modalCallback()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// PINGBOT v3 — Service Worker Powered Background Monitoring
+// ══════════════════════════════════════════════════════════════════════════════
+
+const PING_API  = '/api/ping';
+const MAX       = 10;
+const IV_LABELS = {
+  '30000':'30s','60000':'1m','120000':'2m','300000':'5m',
+  '600000':'10m','900000':'15m','1800000':'30m','3600000':'1h',
+  '7200000':'2h','18000000':'5h','36000000':'10h','86400000':'24h',
+  '259200000':'3d','604800000':'7d'
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let monitors  = JSON.parse(localStorage.getItem('pb_mons') || '[]');
+let pings     = +localStorage.getItem('pb_pings') || 0;
+let darkMode  = localStorage.getItem('pb_dark') !== 'false';
+let allPaused = false;
+let _modalCb  = null;
+let swReg     = null;   // ServiceWorkerRegistration
+let swReady   = false;  // Is SW active?
+
+// Fallback in-page timers (jab SW nahi hai)
+let fallbackTimers = {};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVICE WORKER SETUP
+// ══════════════════════════════════════════════════════════════════════════════
+async function initSW() {
+  if (!('serviceWorker' in navigator)) {
+    console.warn('SW not supported, using fallback timers');
+    startFallbackTimers();
+    return;
+  }
+  try {
+    swReg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+    // Wait for SW to be active
+    await navigator.serviceWorker.ready;
+    swReady = true;
+    updateSWBadge(true);
+
+    // Sync current state to SW
+    swSend({ type: 'INIT', payload: { monitors, pings } });
+
+    // Listen for ping results from SW
+    navigator.serviceWorker.addEventListener('message', onSWMessage);
+
+    // Handle SW updates
+    swReg.addEventListener('updatefound', () => {
+      const newSW = swReg.installing;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          toast('PingBot updated! Page refresh karega...', 'i');
+          setTimeout(() => location.reload(), 2500);
+        }
+      });
+    });
+
+    // Visibility change — page wapas aane par sync karo
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) syncFromStorage();
+    });
+
+  } catch(err) {
+    console.error('SW registration failed:', err);
+    updateSWBadge(false);
+    startFallbackTimers();
+  }
+}
+
+function swSend(msg) {
+  if (!swReady) return false;
+  try {
+    navigator.serviceWorker.controller?.postMessage(msg);
+    return true;
+  } catch(e) {
+    console.error('SW send failed:', e);
+    return false;
+  }
+}
+
+function onSWMessage(e) {
+  const { type, monitor, pings: p } = e.data || {};
+  if (type !== 'PING_RESULT') return;
+
+  // SW ne ping kiya — local state update karo aur UI refresh karo
+  const idx = monitors.findIndex(m => m.id === monitor.id);
+  if (idx < 0) return;
+
+  monitors[idx] = { ...monitors[idx], ...monitor };
+  if (p !== undefined) pings = p;
+
+  save();
+  renderCard(monitor.id);
+  updateStats();
+}
+
+function updateSWBadge(active) {
+  const badge = document.getElementById('swBadge');
+  const label = document.getElementById('swLabel');
+  if (active) {
+    badge.className = 'sw-badge active';
+    label.textContent = 'Background: On';
+  } else {
+    badge.className = 'sw-badge inactive';
+    label.textContent = 'Background: Off';
+  }
+}
+
+// Reload ke baad storage se fresh data lo
+function syncFromStorage() {
+  const saved = JSON.parse(localStorage.getItem('pb_mons') || '[]');
+  const savedPings = +localStorage.getItem('pb_pings') || 0;
+  // Merge SW results into local monitors
+  saved.forEach(savedM => {
+    const idx = monitors.findIndex(m => m.id === savedM.id);
+    if (idx >= 0) {
+      // SW updated kiya hoga, take newer data
+      monitors[idx] = savedM;
+    }
+  });
+  pings = Math.max(pings, savedPings);
+  monitors.forEach(m => renderCard(m.id));
+  updateStats();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FALLBACK TIMERS (jab SW support nahi)
+// ══════════════════════════════════════════════════════════════════════════════
+function startFallbackTimers() {
+  monitors.forEach(m => { if (!m.paused) startFallbackTimer(m.id); });
+}
+
+function startFallbackTimer(id) {
+  clearInterval(fallbackTimers[id]);
+  const m = monitors.find(x => x.id === id);
+  if (m && !m.paused) {
+    fallbackTimers[id] = setInterval(() => pingFallback(id), m.interval);
+  }
+}
+
+async function pingFallback(id) {
+  const m = monitors.find(x => x.id === id);
+  if (!m || m.paused) return;
+  m.lastPing = Date.now();
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15000);
+    const res  = await fetch(
+      `${PING_API}?url=${encodeURIComponent(m.url)}&_=${Date.now()}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(tid);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    m.status    = data.ok ? 'up' : 'down';
+    m.lastMs    = data.ms;
+    m.lastCode  = data.status_code;
+    m.lastError = data.error || null;
+  } catch(e) {
+    m.status = 'down'; m.lastMs = null; m.lastCode = 0;
+    m.lastError = e.name === 'AbortError' ? 'Timeout (15s)' : (e.message || 'Network error');
+  }
+  m.pingCount = (m.pingCount || 0) + 1;
+  if (m.status === 'down') m.downCount = (m.downCount || 0) + 1;
+  m.history = m.history || [];
+  m.history.push({ ok: m.status === 'up', ms: m.lastMs, ts: Date.now() });
+  if (m.history.length > 30) m.history.shift();
+  pings++;
+  localStorage.setItem('pb_pings', pings);
+  save(); renderCard(id); updateStats();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL
+// ══════════════════════════════════════════════════════════════════════════════
+function showModal({ icon, title, msg, btnLabel, btnClass, onConfirm }) {
+  document.getElementById('modalIcon').textContent   = icon;
+  document.getElementById('modalTitle').textContent  = title;
+  document.getElementById('modalMsg').innerHTML      = msg;
+  const btn = document.getElementById('modalConfirmBtn');
+  btn.textContent = btnLabel;
+  btn.className   = `mbtn ${btnClass}`;
+  _modalCb = onConfirm;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+  _modalCb = null;
+}
+function modalCallback() {
+  closeModal();
+  if (_modalCb) _modalCb();
+}
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// THEME
+// ══════════════════════════════════════════════════════════════════════════════
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+  document.getElementById('darkCb').checked = darkMode;
+}
+function toggleDark() { darkMode = !darkMode; localStorage.setItem('pb_dark', darkMode); applyTheme(); }
+applyTheme();
+
+// Settings dropdown
+document.getElementById('settBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('dropdown').classList.toggle('open');
+});
+document.addEventListener('click', () => document.getElementById('dropdown').classList.remove('open'));
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ADD MONITOR
+// ══════════════════════════════════════════════════════════════════════════════
+function addMonitor() {
+  if (monitors.length >= MAX) { toast('Max 10 monitors!', 'e'); return; }
+  let url = document.getElementById('urlIn').value.trim();
+  if (!url) { toast('Enter a URL first', 'e'); return; }
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  if (monitors.find(m => m.url === url)) { toast('Already monitoring this URL', 'e'); return; }
+  const iv = +document.getElementById('ivSel').value;
+  const id = 'M' + Date.now();
+  const mon = {
+    id, url, interval: iv, status: 'pending',
+    lastMs: null, lastCode: null, lastError: null, lastPing: null,
+    pingCount: 0, downCount: 0, history: [], paused: false, addedAt: Date.now()
+  };
+  monitors.push(mon);
+  save();
+  document.getElementById('urlIn').value = '';
+  document.getElementById('empty').style.display = 'none';
+  renderCard(id, true);
+  updateStats();
+  toast(`Monitoring ${url}`, 's');
+
+  if (swReady) {
+    swSend({ type: 'ADD', payload: { monitor: mon } });
+  } else {
+    // Fallback
+    pingFallback(id);
+    startFallbackTimer(id);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DELETE
+// ══════════════════════════════════════════════════════════════════════════════
+function confirmDelete(id) {
+  const m = monitors.find(x => x.id === id);
+  if (!m) return;
+  showModal({
+    icon: '🗑️',
+    title: 'Delete Monitor?',
+    msg: `Yeh monitor permanently delete ho jayega:<br><br><b>${m.url}</b>`,
+    btnLabel: 'Haan, Delete Karo',
+    btnClass: 'confirm-del',
+    onConfirm: () => delMon(id)
+  });
+}
+
+function delMon(id) {
+  // SW ko notify karo
+  swSend({ type: 'DELETE', payload: { id } });
+  // Fallback timer bhi clear karo
+  clearInterval(fallbackTimers[id]); delete fallbackTimers[id];
+
+  monitors = monitors.filter(m => m.id !== id);
+  save();
+  const c = document.getElementById('card_' + id);
+  if (c) { c.style.opacity = '0'; c.style.transform = 'scale(.95)'; c.style.transition = '.2s'; setTimeout(() => c.remove(), 200); }
+  updateStats();
+  document.getElementById('mc').textContent = monitors.length;
+  document.getElementById('liveCount').textContent = monitors.filter(x => !x.paused).length;
+  if (monitors.length === 0) document.getElementById('empty').style.display = '';
+  toast('Monitor removed', 'i');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PAUSE / RESUME
+// ══════════════════════════════════════════════════════════════════════════════
+function confirmTogglePause(id) {
+  const m = monitors.find(x => x.id === id);
+  if (!m) return;
+  if (m.paused) { togglePause(id); return; } // Resume = no confirm
+  showModal({
+    icon: '⏸️',
+    title: 'Monitor Pause Karo?',
+    msg: `Yeh monitor ping karna band kar dega jab tak resume nahi karte:<br><br><b>${m.url}</b>`,
+    btnLabel: 'Haan, Pause Karo',
+    btnClass: 'confirm-pause',
+    onConfirm: () => togglePause(id)
+  });
+}
+
+function togglePause(id) {
+  const m = monitors.find(x => x.id === id); if (!m) return;
+  m.paused = !m.paused;
+  save();
+
+  if (m.paused) {
+    swSend({ type: 'PAUSE', payload: { id } });
+    clearInterval(fallbackTimers[id]);
+  } else {
+    swSend({ type: 'RESUME', payload: { id } });
+    if (!swReady) { pingFallback(id); startFallbackTimer(id); }
+  }
+
+  renderCard(id);
+  document.getElementById('liveCount').textContent = monitors.filter(x => !x.paused).length;
+  toast(m.paused ? 'Monitor paused' : 'Monitor resumed', 'i');
+}
+
+// ── Pause All ─────────────────────────────────────────────────────────────────
+function confirmPauseAll() {
+  document.getElementById('dropdown').classList.remove('open');
+  const active = monitors.filter(m => !m.paused).length;
+  if (!allPaused && active === 0) { toast('Koi active monitor nahi hai', 'i'); return; }
+  if (allPaused) { doPauseAll(); return; }
+  showModal({
+    icon: '⏸️',
+    title: 'Sab Monitor Pause Karo?',
+    msg: `Sare <b style="color:var(--accent)">${active} active monitors</b> pause ho jayenge.`,
+    btnLabel: 'Haan, Sab Pause Karo',
+    btnClass: 'confirm-pause',
+    onConfirm: doPauseAll
+  });
+}
+
+function doPauseAll() {
+  allPaused = !allPaused;
+  monitors.forEach(m => { m.paused = allPaused; });
+  save();
+
+  if (allPaused) {
+    swSend({ type: 'PAUSE_ALL' });
+    Object.values(fallbackTimers).forEach(t => clearInterval(t));
+    fallbackTimers = {};
+  } else {
+    swSend({ type: 'RESUME_ALL' });
+    if (!swReady) startFallbackTimers();
+  }
+
+  monitors.forEach(m => renderCard(m.id));
+  document.getElementById('pauseAllLbl').textContent = allPaused ? 'Resume All' : 'Pause All';
+  document.getElementById('liveCount').textContent = monitors.filter(x => !x.paused).length;
+  toast(allPaused ? 'Sab monitors pause ho gaye' : 'Sab monitors resume ho gaye', 'i');
+}
+
+// ── Clear All ─────────────────────────────────────────────────────────────────
+function confirmClearAll() {
+  document.getElementById('dropdown').classList.remove('open');
+  if (monitors.length === 0) { toast('Koi monitor nahi hai', 'i'); return; }
+  showModal({
+    icon: '⚠️',
+    title: 'Sab Monitors Delete Karo?',
+    msg: `Sare <b style="color:var(--danger)">${monitors.length} monitors</b> aur unki poori history permanently delete ho jayegi.<br><br>Yeh action undo nahi ho sakta!`,
+    btnLabel: 'Haan, Sab Delete Karo',
+    btnClass: 'confirm-clear',
+    onConfirm: doClearAll
+  });
+}
+
+function doClearAll() {
+  swSend({ type: 'CLEAR_ALL' });
+  Object.values(fallbackTimers).forEach(t => clearInterval(t)); fallbackTimers = {};
+  monitors = []; save();
+  document.getElementById('list').innerHTML = `<div class="empty" id="empty">
+    <div class="eic">🛰️</div><h3>No monitors yet</h3>
+    <p>Add a URL above to start monitoring</p></div>`;
+  updateStats();
+  document.getElementById('mc').textContent = 0;
+  document.getElementById('liveCount').textContent = 0;
+  toast('Sab monitors delete ho gaye', 'i');
+}
+
+// ── Change Interval ───────────────────────────────────────────────────────────
+function changeIv(id, v) {
+  const m = monitors.find(x => x.id === id); if (!m) return;
+  m.interval = +v; save();
+  swSend({ type: 'INTERVAL_CHANGE', payload: { id, interval: +v } });
+  if (!swReady && !m.paused) {
+    clearInterval(fallbackTimers[id]);
+    startFallbackTimer(id);
+  }
+  renderCard(id);
+  toast(`Interval → ${IV_LABELS[v]}`, 'i');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RENDER CARD
+// ══════════════════════════════════════════════════════════════════════════════
+function renderCard(id, insert = false) {
+  const m = monitors.find(x => x.id === id);
+  if (!m) return;
+  const uptime  = m.pingCount > 0 ? Math.round(((m.pingCount - (m.downCount || 0)) / m.pingCount) * 100) : 100;
+  const since   = m.lastPing ? ago(m.lastPing) : '—';
+  const ivLabel = IV_LABELS[String(m.interval)] || '?';
+  const hist    = (m.history || []).slice(-30);
+  let histHtml  = '';
+  for (let i = 0; i < 30; i++) {
+    const h = hist[i];
+    if (!h) histHtml += `<div class="hb none" title="No data"></div>`;
+    else    histHtml += `<div class="hb ${h.ok ? 'ok' : 'fail'}" title="${h.ok ? 'UP' : 'DOWN'} • ${h.ms ?? '—'}ms • ${new Date(h.ts).toLocaleTimeString()}"></div>`;
+  }
+  const msClass   = m.lastMs != null ? (m.lastMs < 800 ? 'g' : 'r') : '';
+  const codeClass = m.lastCode ? (m.lastCode < 400 ? 'g' : 'r') : '';
+  const html = `
+  <div class="card ${m.status}" id="card_${id}">
+    <div class="card-top">
+      <div class="pulse ${m.status}"></div>
+      <div class="card-url" title="${m.url}">${m.url}</div>
+      <div class="badge ${m.status}">${m.status === 'pending' ? 'Checking…' : m.status === 'up' ? '✓ Online' : '✗ Offline'}</div>
+      <button class="del-btn" onclick="confirmDelete('${id}')" title="Remove">✕</button>
+    </div>
+    <div class="card-meta">
+      <div class="meta-i">⚡ Response: <span class="v ${msClass}">${m.lastMs != null ? m.lastMs + 'ms' : '—'}</span></div>
+      <div class="meta-i">🔢 HTTP: <span class="v ${codeClass}">${m.lastCode || '—'}</span></div>
+      <div class="meta-i">🔄 Pings: <span class="v">${m.pingCount}</span></div>
+      <div class="meta-i">🕐 Last: <span class="v" id="ago_${id}">${since}</span></div>
+      <div class="meta-i">📈 Uptime: <span class="v ${uptime > 90 ? 'g' : 'r'}">${uptime}%</span></div>
+      ${m.lastError ? `<div class="meta-i">⚠️ <span class="v r">${m.lastError}</span></div>` : ''}
+    </div>
+    <div class="hist" title="Last 30 checks">${histHtml}</div>
+    <div class="card-bot">
+      <div class="bot-left">
+        <span style="font-size:11px;color:var(--text-muted)">Every:</span>
+        <select class="mini-sel" onchange="changeIv('${id}',this.value)">
+          ${Object.entries(IV_LABELS).map(([v,l]) => `<option value="${v}"${v == m.interval ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+        <span class="itag">🔁 ${ivLabel}</span>
+      </div>
+      <button class="pause-btn${m.paused ? ' paused' : ''}" onclick="confirmTogglePause('${id}')">
+        ${m.paused ? '▶ Resume' : '⏸ Pause'}
+      </button>
+    </div>
+  </div>`;
+  const list = document.getElementById('list');
+  if (insert) { list.insertAdjacentHTML('afterbegin', html); }
+  else { const ex = document.getElementById('card_' + id); if (ex) ex.outerHTML = html; }
+  document.getElementById('mc').textContent = monitors.length;
+  document.getElementById('liveCount').textContent = monitors.filter(x => !x.paused).length;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATS & HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+function updateStats() {
+  document.getElementById('sTotal').textContent = monitors.length;
+  document.getElementById('sUp').textContent    = monitors.filter(m => m.status === 'up').length;
+  document.getElementById('sDown').textContent  = monitors.filter(m => m.status === 'down').length;
+  document.getElementById('sPings').textContent = pings;
+}
+
+function ago(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+function save() {
+  try { localStorage.setItem('pb_mons', JSON.stringify(monitors)); }
+  catch(e) { console.error('Save failed:', e); }
+}
+
+function toast(msg, t = 'i') {
+  const icons = { s: '✅', e: '❌', i: 'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast ${t}`;
+  el.innerHTML = `${icons[t]} ${msg}`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(14px)'; el.style.transition = '.3s'; setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+document.getElementById('urlIn').addEventListener('keydown', e => { if (e.key === 'Enter') addMonitor(); });
+
+// Periodic UI update (ago timestamps + stats)
+setInterval(() => {
+  monitors.forEach(m => {
+    const el = document.getElementById('ago_' + m.id);
+    if (el && m.lastPing) el.textContent = ago(m.lastPing);
+  });
+  updateStats();
+}, 5000);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════════════════
+(function init() {
+  if (monitors.length) {
+    document.getElementById('empty').style.display = 'none';
+    monitors.forEach(m => renderCard(m.id, true));
+    updateStats();
+    document.getElementById('mc').textContent = monitors.length;
+    document.getElementById('liveCount').textContent = monitors.filter(x => !x.paused).length;
+  }
+  // Service Worker init — yeh background ping handle karega
+  initSW();
+})();
+</script>
+</body>
+</html>
